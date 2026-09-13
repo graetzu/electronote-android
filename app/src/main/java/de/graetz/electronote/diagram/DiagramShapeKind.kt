@@ -11,7 +11,7 @@ enum class DiagramShapeKind(val label: String, val widthPx: Float, val heightPx:
     IO("Ein-/Ausgabe", 160f, 54f),
     DECISION("Verzweigung", 150f, 70f),
     SUBROUTINE("Unterprogramm", 160f, 54f),
-    COMMENT("Kommentar", 210f, 65f),
+    COMMENT("Kommentar", 220f, 75f),
     CONNECTOR("Verbindung", 32f, 32f),
 
     // MindMap

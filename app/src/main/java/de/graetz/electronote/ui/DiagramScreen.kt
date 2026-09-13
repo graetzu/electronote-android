@@ -62,6 +62,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -465,13 +466,16 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
                             .horizontalScroll(hScroll)
                             .verticalScroll(vScroll)
                     ) {
+                        val density = LocalDensity.current
+                        val densityFactor = density.density
+
                         Box(
                             modifier = Modifier
                                 .size(width = CANVAS_SIZE_DP.dp, height = CANVAS_SIZE_DP.dp)
                                 .pointerInputTap(pendingShape) { offset ->
                                     val shape = pendingShape
                                     if (shape != null) {
-                                        addNode(shape, offset.x, offset.y)
+                                        addNode(shape, offset.x / densityFactor, offset.y / densityFactor)
                                         pendingShape = null
                                     } else {
                                         selectedNodeId = null
@@ -481,9 +485,13 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
                             if (isPap) {
                                 // Column guides, matching PapDesigner
                                 Canvas(modifier = Modifier.fillMaxSize()) {
-                                    for (col in 0..4) {
-                                        val x = PapGrid.centerX(col)
-                                        drawLine(Color(0x12000000), Offset(x, 0f), Offset(x, CANVAS_SIZE_DP.dp.toPx()), strokeWidth = 1f)
+                                    withTransform({
+                                        scale(scaleX = densityFactor, scaleY = densityFactor, pivot = Offset.Zero)
+                                    }) {
+                                        for (col in 0..5) {
+                                            val x = PapGrid.centerX(col)
+                                            drawLine(Color(0x12000000), Offset(x, 0f), Offset(x, CANVAS_SIZE_DP.toFloat()), strokeWidth = 1f)
+                                        }
                                     }
                                 }
 
@@ -495,7 +503,12 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
                                     color = Color(0xFF00008B),
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier
-                                        .offset { IntOffset((PapGrid.centerX(1) - 175f).roundToInt(), 30) }
+                                        .offset {
+                                            IntOffset(
+                                                ((PapGrid.centerX(1) - 175f) * densityFactor).roundToInt(),
+                                                (28f * densityFactor).roundToInt()
+                                            )
+                                        }
                                         .width(350.dp)
                                 )
                             }
@@ -510,21 +523,25 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
                             } else emptyList()
 
                             Canvas(modifier = Modifier.fillMaxSize()) {
-                                if (isPap) {
-                                    val priorPolylines = mutableListOf<List<Offset>>()
-                                    for ((_, route) in papRoutes) {
-                                        val path = buildPathWithCrossingJumps(route.points, priorPolylines)
-                                        drawPath(path, Color(0xFF333333), style = Stroke(width = 2.8f))
-                                        arrowHeadPath(route.points)?.let { drawPath(it, Color(0xFF333333)) }
-                                        priorPolylines.add(route.points)
-                                    }
-                                } else {
-                                    for (conn in connections) {
-                                        val from = nodes.find { it.id == conn.fromNodeId } ?: continue
-                                        val to = nodes.find { it.id == conn.toNodeId } ?: continue
-                                        val (start, end) = mindMapEndpoints(from.toNode(), to.toNode())
-                                        val path = mindMapCurvePath(start, end)
-                                        drawPath(path, Color(from.colorArgb).copy(alpha = 0.85f), style = Stroke(width = 3.5f))
+                                withTransform({
+                                    scale(scaleX = densityFactor, scaleY = densityFactor, pivot = Offset.Zero)
+                                }) {
+                                    if (isPap) {
+                                        val priorPolylines = mutableListOf<List<Offset>>()
+                                        for ((_, route) in papRoutes) {
+                                            val path = buildPathWithCrossingJumps(route.points, priorPolylines)
+                                            drawPath(path, Color(0xFF333333), style = Stroke(width = 2.2f))
+                                            arrowHeadPath(route.points)?.let { drawPath(it, Color(0xFF333333)) }
+                                            priorPolylines.add(route.points)
+                                        }
+                                    } else {
+                                        for (conn in connections) {
+                                            val from = nodes.find { it.id == conn.fromNodeId } ?: continue
+                                            val to = nodes.find { it.id == conn.toNodeId } ?: continue
+                                            val (start, end) = mindMapEndpoints(from.toNode(), to.toNode())
+                                            val path = mindMapCurvePath(start, end)
+                                            drawPath(path, Color(from.colorArgb).copy(alpha = 0.85f), style = Stroke(width = 3.0f))
+                                        }
                                     }
                                 }
                             }
@@ -535,9 +552,14 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
                                     if (conn.label.isBlank()) continue
                                     Box(
                                         modifier = Modifier
-                                            .offset { IntOffset(route.labelPos.x.roundToInt(), route.labelPos.y.roundToInt()) }
-                                            .background(Color.White.copy(alpha = 0.9f), RoundedCornerShape(2.dp))
-                                            .padding(horizontal = 3.dp)
+                                            .offset {
+                                                IntOffset(
+                                                    (route.labelPos.x * densityFactor).roundToInt(),
+                                                    (route.labelPos.y * densityFactor).roundToInt()
+                                                )
+                                            }
+                                            .background(Color.White.copy(alpha = 0.95f), RoundedCornerShape(2.dp))
+                                            .padding(horizontal = 4.dp, vertical = 1.dp)
                                     ) {
                                         Text(
                                             conn.label,
@@ -594,15 +616,21 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
                             // DIN Title Block (Schriftfeld) in Bottom-Right
                             if (isPap) {
                                 val maxNodeY = nodes.maxOfOrNull { it.y + it.shape.heightPx } ?: 600f
+                                val maxNodeX = nodes.maxOfOrNull { it.x + it.shape.widthPx } ?: 600f
                                 val titleBlockY = max(maxNodeY + 50f, 740f)
-                                val titleBlockX = 640f
+                                val titleBlockX = max(maxNodeX - 280f, 380f)
                                 DinTitleBlock(
                                     projectName = "Tutorial - Ablaufplan",
                                     author = "f.folkmann",
                                     diagramName = diagramName.ifBlank { "Ablaufplan" },
                                     createdDate = "14.01.07",
                                     modifiedDate = "18.04.20",
-                                    modifier = Modifier.offset { IntOffset(titleBlockX.roundToInt(), titleBlockY.roundToInt()) }
+                                    modifier = Modifier.offset {
+                                        IntOffset(
+                                            (titleBlockX * densityFactor).roundToInt(),
+                                            (titleBlockY * densityFactor).roundToInt()
+                                        )
+                                    }
                                 )
                             }
                         }
@@ -839,8 +867,9 @@ private fun DiagramNodeView(
     onMoved: () -> Unit
 ) {
     val density = LocalDensity.current
-    val widthDp = with(density) { node.shape.widthPx.toDp() }
-    val heightDp = with(density) { node.shape.heightPx.toDp() }
+    val densityFactor = density.density
+    val widthDp = node.shape.widthPx.dp
+    val heightDp = node.shape.heightPx.dp
 
     val fillColor = if (isPap) node.shape.papFillColor() else Color(node.colorArgb)
     val strokeColor = if (isPap) node.shape.papStrokeColor() else MaterialTheme.colorScheme.outline
@@ -848,7 +877,9 @@ private fun DiagramNodeView(
 
     Box(
         modifier = Modifier
-            .offset { IntOffset(node.x.roundToInt(), node.y.roundToInt()) }
+            .offset {
+                IntOffset((node.x * densityFactor).roundToInt(), (node.y * densityFactor).roundToInt())
+            }
             .size(width = widthDp, height = heightDp)
             .then(
                 if (!isComment) {
@@ -886,8 +917,8 @@ private fun DiagramNodeView(
                 detectDragGestures(
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        node.x += dragAmount.x
-                        node.y += dragAmount.y
+                        node.x += dragAmount.x / densityFactor
+                        node.y += dragAmount.y / densityFactor
                     },
                     onDragEnd = {
                         if (snapToGrid) {
@@ -922,7 +953,7 @@ private fun DiagramNodeView(
                 top = 4.dp,
                 bottom = 4.dp
             ),
-            maxLines = if (isComment) 5 else 3,
+            maxLines = if (isComment) 6 else 3,
             lineHeight = if (isComment) 13.sp else 15.sp
         )
 
