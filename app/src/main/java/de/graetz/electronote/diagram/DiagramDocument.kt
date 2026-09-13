@@ -11,7 +11,11 @@ data class DiagramDocument(
     val createdAt: Long = System.currentTimeMillis(),
     var updatedAt: Long = System.currentTimeMillis(),
     var nodes: MutableList<DiagramNode> = mutableListOf(),
-    var connections: MutableList<DiagramConnection> = mutableListOf()
+    var connections: MutableList<DiagramConnection> = mutableListOf(),
+    // PAP only: how far a routed connection detours away from a node's edge before
+    // turning — adjustable per diagram so denser layouts with bigger nodes can spread
+    // routes out further to avoid overlapping node bodies.
+    var bypassDistancePx: Float = DEFAULT_BYPASS_DISTANCE_PX
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -21,6 +25,7 @@ data class DiagramDocument(
         put("updatedAt", updatedAt)
         put("nodes", JSONArray(nodes.map { it.toJson() }))
         put("connections", JSONArray(connections.map { it.toJson() }))
+        put("bypassDistancePx", bypassDistancePx.toDouble())
     }
 
     companion object {
@@ -43,7 +48,8 @@ data class DiagramDocument(
                 createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis()),
                 nodes = nodes,
-                connections = connections
+                connections = connections,
+                bypassDistancePx = obj.optDouble("bypassDistancePx", DEFAULT_BYPASS_DISTANCE_PX.toDouble()).toFloat()
             )
         }
     }

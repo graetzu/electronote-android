@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Timeline
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +34,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,6 +56,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.graetz.electronote.diagram.DEFAULT_BYPASS_DISTANCE_PX
 import de.graetz.electronote.diagram.DiagramConnection
 import de.graetz.electronote.diagram.DiagramDocument
 import de.graetz.electronote.diagram.DiagramNode
@@ -64,16 +67,16 @@ import de.graetz.electronote.diagram.MINDMAP_SHAPES
 import de.graetz.electronote.diagram.PAP_SHAPES
 import de.graetz.electronote.diagram.PapGrid
 import de.graetz.electronote.diagram.arrowHeadPath
+import de.graetz.electronote.diagram.buildPathWithCrossingJumps
 import de.graetz.electronote.diagram.composeShapeFor
 import de.graetz.electronote.diagram.hasSubroutineStripes
 import de.graetz.electronote.diagram.mindMapCurvePath
 import de.graetz.electronote.diagram.mindMapEndpoints
-import de.graetz.electronote.diagram.routePapConnection
+import de.graetz.electronote.diagram.routePapConnectionFull
 import de.graetz.electronote.ui.theme.IosColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val CANVAS_SIZE_DP = 2400
@@ -108,6 +111,8 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
     var connectMode by remember { mutableStateOf(false) }
     var connectFromId by remember { mutableStateOf<String?>(null) }
     var editingNode by remember { mutableStateOf<NodeUiState?>(null) }
+    var bypassDistancePx by remember { mutableStateOf(DEFAULT_BYPASS_DISTANCE_PX) }
+    var showRoutingSettings by remember { mutableStateOf(false) }
 
     val hScroll = rememberScrollState()
     val vScroll = rememberScrollState()
@@ -119,7 +124,8 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
             name = diagramName,
             type = diagramType,
             nodes = nodes.map { it.toNode() }.toMutableList(),
-            connections = connections.toMutableList()
+            connections = connections.toMutableList(),
+            bypassDistancePx = bypassDistancePx
         )
         scope.launch(Dispatchers.IO) { DiagramStore.saveDiagram(context, doc) }
     }
@@ -131,13 +137,21 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
             diagramType = loaded.type
             nodes = loaded.nodes.map { NodeUiState(it) }
             connections = loaded.connections
+            bypassDistancePx = loaded.bypassDistancePx
         }
         isLoading = false
     }
 
     fun addNode(shape: DiagramShapeKind, tapX: Float, tapY: Float) {
         val node = if (isPap) {
-            val (col, row) = PapGrid.nearestGrid(tapX, tapY)
+            var (col, row) = PapGrid.nearestGrid(tapX, tapY)
+            // Auto-stack: if that cell is already occupied, drop straight to the next
+            // free row below the lowest existing node in this column instead of
+            // overlapping it — matches iOS's own "add to column" placement, but only
+            // kicks in on collision so a deliberate tap elsewhere still places exactly there.
+            if (nodes.any { it.col == col && it.row == row }) {
+                row = (nodes.filter { it.col == col }.mapNotNull { it.row }.maxOrNull() ?: (row - 1)) + 1
+            }
             DiagramNode(
                 x = PapGrid.centerX(col) - shape.widthPx / 2f,
                 y = PapGrid.centerY(row) - shape.heightPx / 2f,
@@ -215,6 +229,11 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
                         tint = if (connectMode) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                         modifier = Modifier.size(20.dp)
                     )
+                }
+                if (isPap) {
+                    IconButton(onClick = { showRoutingSettings = true }) {
+                        Icon(Icons.Outlined.Tune, contentDescription = "Verbindungsabstand", modifier = Modifier.size(20.dp))
+                    }
                 }
             }
         }
@@ -307,18 +326,30 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
                             }
                         }
 
+                        // Routes are computed once up front (not per-draw-call-per-connection)
+                        // so each connection's crossing-jump pass can see every *earlier*
+                        // connection's already-routed polyline — see buildPathWithCrossingJumps.
+                        val papRoutes = if (isPap) {
+                            connections.mapNotNull { conn ->
+                                val from = nodes.find { it.id == conn.fromNodeId } ?: return@mapNotNull null
+                                val to = nodes.find { it.id == conn.toNodeId } ?: return@mapNotNull null
+                                conn to routePapConnectionFull(from.toNode(), to.toNode(), conn.fromPort, bypassDistancePx)
+                            }
+                        } else emptyList()
+
                         Canvas(modifier = Modifier.fillMaxSize()) {
-                            for (conn in connections) {
-                                val from = nodes.find { it.id == conn.fromNodeId } ?: continue
-                                val to = nodes.find { it.id == conn.toNodeId } ?: continue
-                                if (isPap) {
-                                    val points = routePapConnection(from.toNode(), to.toNode(), conn.fromPort)
-                                    val path = androidx.compose.ui.graphics.Path()
-                                    path.moveTo(points[0].x, points[0].y)
-                                    for (p in points.drop(1)) path.lineTo(p.x, p.y)
+                            if (isPap) {
+                                val priorPolylines = mutableListOf<List<Offset>>()
+                                for ((_, route) in papRoutes) {
+                                    val path = buildPathWithCrossingJumps(route.points, priorPolylines)
                                     drawPath(path, Color(0xFF6E6E73), style = Stroke(width = 3.5f))
-                                    arrowHeadPath(points)?.let { drawPath(it, Color(0xFF6E6E73)) }
-                                } else {
+                                    arrowHeadPath(route.points)?.let { drawPath(it, Color(0xFF6E6E73)) }
+                                    priorPolylines.add(route.points)
+                                }
+                            } else {
+                                for (conn in connections) {
+                                    val from = nodes.find { it.id == conn.fromNodeId } ?: continue
+                                    val to = nodes.find { it.id == conn.toNodeId } ?: continue
                                     val (start, end) = mindMapEndpoints(from.toNode(), to.toNode())
                                     val path = mindMapCurvePath(start, end)
                                     drawPath(path, Color(from.colorArgb).copy(alpha = 0.85f), style = Stroke(width = 3.5f))
@@ -326,19 +357,17 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
                             }
                         }
 
-                        // PAP connection labels (ja/nein/…), drawn at the route midpoint.
+                        // PAP connection labels (ja/nein/…), drawn at each route's own
+                        // hand-placed label position (beside the bypass corridor), not just
+                        // the polyline's midpoint — matches iOS's label placement.
                         if (isPap) {
-                            for (conn in connections) {
+                            for ((conn, route) in papRoutes) {
                                 if (conn.label.isBlank()) continue
-                                val from = nodes.find { it.id == conn.fromNodeId } ?: continue
-                                val to = nodes.find { it.id == conn.toNodeId } ?: continue
-                                val points = routePapConnection(from.toNode(), to.toNode(), conn.fromPort)
-                                val mid = points[points.size / 2]
                                 Text(
                                     conn.label,
                                     fontSize = 11.sp,
                                     color = Color(0xFF6E6E73),
-                                    modifier = Modifier.offset { IntOffset(mid.x.roundToInt() + 4, mid.y.roundToInt() - 20) }
+                                    modifier = Modifier.offset { IntOffset(route.labelPos.x.roundToInt(), route.labelPos.y.roundToInt()) }
                                 )
                             }
                         }
@@ -420,6 +449,36 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
             }
         )
     }
+
+    if (showRoutingSettings) {
+        AlertDialog(
+            onDismissRequest = { showRoutingSettings = false },
+            title = { Text("Verbindungsabstand") },
+            text = {
+                Column {
+                    Text(
+                        "Wie weit Verbindungen von Bausteinen ausweichen, bevor sie abbiegen. " +
+                            "Größerer Abstand vermeidet Überschneidungen bei dicht stehenden Bausteinen.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        "${bypassDistancePx.roundToInt()} px",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    Slider(
+                        value = bypassDistancePx,
+                        onValueChange = { bypassDistancePx = it },
+                        onValueChangeFinished = { persist() },
+                        valueRange = 16f..80f
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showRoutingSettings = false }) { Text("Fertig") }
+            }
+        )
+    }
 }
 
 @Composable
@@ -431,7 +490,6 @@ private fun DiagramNodeView(
     onTap: () -> Unit,
     onMoved: () -> Unit
 ) {
-    var totalDrag by remember(node.id) { mutableStateOf(Offset.Zero) }
     Box(
         modifier = Modifier
             .offset { IntOffset(node.x.roundToInt(), node.y.roundToInt()) }
@@ -439,32 +497,34 @@ private fun DiagramNodeView(
             .clip(composeShapeFor(node.shape))
             .background(if (selected) MaterialTheme.colorScheme.primary else Color(node.colorArgb))
             .border(1.5.dp, Color.Black.copy(alpha = 0.3f), composeShapeFor(node.shape))
+            // A pure tap (no movement at all) never triggers detectDragGestures's
+            // onDragStart/onDragEnd — Compose only invokes those once the pointer crosses
+            // touch slop. Without a separate tap detector, quick taps on a node (the
+            // common case) silently did nothing: no rename dialog, no connect-mode target
+            // selection. Two independent pointerInput blocks both see the same raw events,
+            // so tap and drag-to-move now work regardless of how the touch actually moved.
+            .pointerInput(node.id) {
+                detectTapGestures(onTap = { onTap() })
+            }
             .pointerInput(node.id, connectMode) {
+                if (connectMode) return@pointerInput
                 detectDragGestures(
-                    onDragStart = { totalDrag = Offset.Zero },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        totalDrag += dragAmount
-                        if (!connectMode) {
-                            node.x += dragAmount.x
-                            node.y += dragAmount.y
-                        }
+                        node.x += dragAmount.x
+                        node.y += dragAmount.y
                     },
                     onDragEnd = {
-                        if (abs(totalDrag.x) < 6f && abs(totalDrag.y) < 6f) {
-                            onTap()
-                        } else if (!connectMode) {
-                            if (snapToGrid) {
-                                val cx = node.x + node.shape.widthPx / 2f
-                                val cy = node.y + node.shape.heightPx / 2f
-                                val (col, row) = PapGrid.nearestGrid(cx, cy)
-                                node.col = col
-                                node.row = row
-                                node.x = PapGrid.centerX(col) - node.shape.widthPx / 2f
-                                node.y = PapGrid.centerY(row) - node.shape.heightPx / 2f
-                            }
-                            onMoved()
+                        if (snapToGrid) {
+                            val cx = node.x + node.shape.widthPx / 2f
+                            val cy = node.y + node.shape.heightPx / 2f
+                            val (col, row) = PapGrid.nearestGrid(cx, cy)
+                            node.col = col
+                            node.row = row
+                            node.x = PapGrid.centerX(col) - node.shape.widthPx / 2f
+                            node.y = PapGrid.centerY(row) - node.shape.heightPx / 2f
                         }
+                        onMoved()
                     }
                 )
             },
