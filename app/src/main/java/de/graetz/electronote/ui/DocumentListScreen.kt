@@ -355,7 +355,8 @@ fun DocumentListScreen(
     if (showNextcloudDownload) {
         NextcloudDownloadDialog(
             onDismiss = { showNextcloudDownload = false },
-            onDownloaded = { refreshKey++ }
+            onDownloaded = { refreshKey++ },
+            onDownloadedDiagram = { refreshKey++ }
         )
     }
     if (showDriveLogin) {

@@ -26,10 +26,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
@@ -348,6 +350,37 @@ fun DiagramScreen(diagramId: String, onBack: () -> Unit) {
                     IconButton(onClick = { showRoutingSettings = true }) {
                         Icon(Icons.Outlined.Tune, contentDescription = "Verbindungsabstand", modifier = Modifier.size(20.dp))
                     }
+                }
+                IconButton(onClick = {
+                    val creds = de.graetz.electronote.nextcloud.NextcloudAuthStore.load(context)
+                    if (creds == null) {
+                        Toast.makeText(context, "Bitte zuerst in der Dokument-Liste mit Nextcloud verbinden", Toast.LENGTH_LONG).show()
+                        return@IconButton
+                    }
+                    val doc = DiagramDocument(
+                        id = diagramId,
+                        name = diagramName,
+                        type = diagramType,
+                        nodes = nodes.map { it.toNode() }.toMutableList(),
+                        connections = connections.toMutableList(),
+                        bypassDistancePx = bypassDistancePx
+                    )
+                    scope.launch {
+                        val success = withContext(Dispatchers.IO) {
+                            de.graetz.electronote.nextcloud.NextcloudSync.uploadDiagram(context, creds, doc)
+                        }
+                        Toast.makeText(
+                            context,
+                            if (success) "Auf Nextcloud gespeichert" else "Hochladen fehlgeschlagen",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }) {
+                    Icon(
+                        Icons.Outlined.CloudUpload,
+                        contentDescription = "Auf Nextcloud speichern",
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }

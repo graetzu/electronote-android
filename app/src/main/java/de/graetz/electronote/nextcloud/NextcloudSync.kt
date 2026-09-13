@@ -3,6 +3,8 @@ package de.graetz.electronote.nextcloud
 import android.content.Context
 import de.graetz.electronote.data.NotebookDocument
 import de.graetz.electronote.data.NotebookStore
+import de.graetz.electronote.diagram.DiagramDocument
+import de.graetz.electronote.diagram.DiagramStore
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
@@ -128,5 +130,67 @@ object NextcloudSync {
         saveCachedExtras(context, id, result.extras)
         NotebookStore.saveDocument(context, document)
         return document
+    }
+
+    // MARK: - Diagram Sync (.epap / .emm)
+
+    private fun diagramExtension(document: DiagramDocument): String =
+        if (document.type == DiagramDocument.TYPE_MINDMAP) "emm" else "epap"
+
+    private fun chooseRemoteDiagramFolderName(credentials: NextcloudCredentials, document: DiagramDocument): String {
+        val ext = diagramExtension(document)
+        val base = document.name.trim().ifEmpty { if (document.type == DiagramDocument.TYPE_MINDMAP) "MindMap" else "Ablaufplan" }
+        val existingNames = NextcloudWebDav.listDocumentFolders(credentials).map { it.folderName }.toSet()
+        var candidate = "$base.$ext"
+        var counter = 2
+        while (candidate in existingNames) {
+            candidate = "$base $counter.$ext"
+            counter++
+        }
+        return candidate
+    }
+
+    /** Uploads a PAP or MindMap diagram to Nextcloud as <Name>.epap or <Name>.emm */
+    fun uploadDiagram(context: Context, credentials: NextcloudCredentials, document: DiagramDocument): Boolean {
+        val folderName = document.remoteFolderName ?: chooseRemoteDiagramFolderName(credentials, document).also {
+            document.remoteFolderName = it
+        }
+        if (!NextcloudWebDav.ensureDocumentFolder(credentials, folderName)) return false
+
+        val jsonBytes = document.toJson().toString().toByteArray()
+        if (!NextcloudWebDav.uploadFile(credentials, folderName, "document.json", jsonBytes)) return false
+
+        DiagramStore.saveDiagram(context, document)
+        return true
+    }
+
+    /** Downloads a remote `.epap` or `.emm` folder and saves it into DiagramStore. */
+    fun downloadDiagram(context: Context, credentials: NextcloudCredentials, folderName: String): DiagramDocument? {
+        val jsonBytes = NextcloudWebDav.downloadFile(credentials, folderName, "document.json") ?: return null
+        val json = try {
+            JSONObject(String(jsonBytes))
+        } catch (e: Exception) {
+            return null
+        }
+
+        val doc = try {
+            DiagramDocument.fromJson(json)
+        } catch (e: Exception) {
+            return null
+        }
+
+        val displayName = folderName.substringBeforeLast(".")
+        if (displayName.isNotEmpty()) {
+            doc.name = displayName
+        }
+        if (folderName.endsWith(".emm")) {
+            doc.type = DiagramDocument.TYPE_MINDMAP
+        } else if (folderName.endsWith(".epap")) {
+            doc.type = DiagramDocument.TYPE_PAP
+        }
+        doc.remoteFolderName = folderName
+
+        DiagramStore.saveDiagram(context, doc)
+        return doc
     }
 }

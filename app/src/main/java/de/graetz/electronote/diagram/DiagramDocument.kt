@@ -15,7 +15,8 @@ data class DiagramDocument(
     // PAP only: how far a routed connection detours away from a node's edge before
     // turning — adjustable per diagram so denser layouts with bigger nodes can spread
     // routes out further to avoid overlapping node bodies.
-    var bypassDistancePx: Float = DEFAULT_BYPASS_DISTANCE_PX
+    var bypassDistancePx: Float = DEFAULT_BYPASS_DISTANCE_PX,
+    var remoteFolderName: String? = null
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -26,6 +27,7 @@ data class DiagramDocument(
         put("nodes", JSONArray(nodes.map { it.toJson() }))
         put("connections", JSONArray(connections.map { it.toJson() }))
         put("bypassDistancePx", bypassDistancePx.toDouble())
+        if (remoteFolderName != null) put("remoteFolderName", remoteFolderName)
     }
 
     companion object {
@@ -49,7 +51,8 @@ data class DiagramDocument(
                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis()),
                 nodes = nodes,
                 connections = connections,
-                bypassDistancePx = obj.optDouble("bypassDistancePx", DEFAULT_BYPASS_DISTANCE_PX.toDouble()).toFloat()
+                bypassDistancePx = obj.optDouble("bypassDistancePx", DEFAULT_BYPASS_DISTANCE_PX.toDouble()).toFloat(),
+                remoteFolderName = if (obj.has("remoteFolderName") && !obj.isNull("remoteFolderName")) obj.getString("remoteFolderName") else null
             )
         }
     }
