@@ -117,6 +117,7 @@ fun DocumentListScreen(
     onOpenSearch: () -> Unit
 ) {
     val context = LocalContext.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val scope = rememberCoroutineScope()
     var documents by remember { mutableStateOf(listOf<NotebookDocumentSummary>()) }
     var diagrams by remember { mutableStateOf(listOf<DiagramSummary>()) }
@@ -488,6 +489,7 @@ fun DocumentListScreen(
                             DocumentItemRow(
                                 item = item,
                                 onOpen = {
+                                    focusManager.clearFocus()
                                     when (item) {
                                         is BrowserItem.Notebook -> onOpenDocument(item.id)
                                         is BrowserItem.Diagram -> onOpenDiagram(item.id)
@@ -528,6 +530,7 @@ fun DocumentListScreen(
                         DocumentItemRow(
                             item = item,
                             onOpen = {
+                                focusManager.clearFocus()
                                 when (item) {
                                     is BrowserItem.Notebook -> onOpenDocument(item.id)
                                     is BrowserItem.Diagram -> onOpenDiagram(item.id)
@@ -691,12 +694,11 @@ private fun DocumentItemRow(
     var showMenu by remember { mutableStateOf(false) }
 
     Card(
+        onClick = onOpen,
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen)
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
