@@ -314,6 +314,13 @@ fun AiSidebarPanel(
                             // from regular Chrome, which they do render correctly for.
                             settings.userAgentString = settings.userAgentString.replace("; wv", "")
                             WebView.setWebContentsDebuggingEnabled(true)
+                            // Confirmed via chrome://inspect: ChatGPT's DOM renders fully
+                            // (all text present) but paints nothing — a known Jetpack Compose
+                            // AndroidView quirk where a WebView with complex CSS (fixed/layered
+                            // UI) never gets promoted to a hardware layer and stays invisible.
+                            // Claude's simpler page happened to render without this; ChatGPT's
+                            // did not. Forcing a hardware layer fixes it for both.
+                            setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                             webViewClient = WebViewClient()
                             webViewRef = this
                             loadUrl(currentUrl)
