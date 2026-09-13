@@ -51,7 +51,8 @@ fun ElectroNoteApp() {
             } else if (showSearch) {
                 SearchScreen(
                     onBack = { showSearch = false },
-                    onOpenDocument = { showSearch = false; openDocumentId = it }
+                    onOpenDocument = { showSearch = false; openDocumentId = it },
+                    onOpenDiagram = { showSearch = false; openDiagramId = it }
                 )
             } else {
                 DocumentListScreen(

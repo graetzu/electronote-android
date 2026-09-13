@@ -148,6 +148,8 @@ import de.graetz.electronote.stickers.StickerPickerDialog
 import de.graetz.electronote.webclipper.WebClipperDialog
 import de.graetz.electronote.ui.theme.ActionPill
 import de.graetz.electronote.ui.theme.IosColors
+import de.graetz.electronote.ui.theme.IosDocumentBadge
+import de.graetz.electronote.ui.theme.formatRelativeDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1246,19 +1248,17 @@ fun NotebookScreen(documentId: String, onBack: () -> Unit) {
                                     )
                                     .clickable { switchToDocument(doc.id) }
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    Icons.Outlined.Description,
-                                    contentDescription = null,
-                                    tint = IosColors.Orange,
-                                    modifier = Modifier.size(20.dp)
+                                IosDocumentBadge(
+                                    docType = doc.docType,
+                                    isFavorite = doc.isFavorite,
+                                    size = 32.dp
                                 )
-                                Column(modifier = Modifier.padding(start = 10.dp)) {
-                                    Text(doc.name, maxLines = 1)
+                                Column(modifier = Modifier.padding(start = 12.dp)) {
+                                    Text(doc.name, maxLines = 1, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                     Text(
-                                        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-                                            .format(Date(doc.updatedAt)),
+                                        formatRelativeDate(doc.updatedAt),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

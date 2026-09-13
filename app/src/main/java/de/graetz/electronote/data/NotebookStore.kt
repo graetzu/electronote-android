@@ -105,6 +105,12 @@ object NotebookStore {
         return doc
     }
 
+    fun renameDocument(context: Context, id: String, newName: String) {
+        val doc = loadDocument(context, id) ?: return
+        doc.name = newName
+        saveDocument(context, doc)
+    }
+
     /** Permanently deletes a document — only call this from the trash view. */
     fun deleteDocument(context: Context, id: String) {
         documentDir(context, id).deleteRecursively()

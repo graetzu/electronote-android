@@ -65,6 +65,12 @@ object DiagramStore {
         return doc
     }
 
+    fun renameDiagram(context: Context, id: String, newName: String) {
+        val doc = loadDiagram(context, id) ?: return
+        doc.name = newName
+        saveDiagram(context, doc)
+    }
+
     /** Permanently deletes a diagram — only call this from the trash view. */
     fun deleteDiagram(context: Context, id: String) {
         documentDir(context, id).deleteRecursively()
