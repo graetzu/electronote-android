@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -490,10 +491,20 @@ private fun DiagramNodeView(
     onTap: () -> Unit,
     onMoved: () -> Unit
 ) {
+    // node.x/y/widthPx/heightPx and all of PapGrid/DiagramRouting are raw-pixel coordinates
+    // (matching the Canvas DrawScope the connections are drawn in, so lines land exactly on
+    // node edges). Modifier.size(Dp) is density-scaled, though — passing widthPx straight as
+    // ".dp" rendered nodes at widthPx × density actual pixels (e.g. ~2.1x too big at a
+    // common 340dpi/2.125x density), so routed connections cleared the *logical* box the
+    // math knew about while visually cutting through the much wider box actually on screen.
+    // Converting through LocalDensity here makes the RENDERED pixel size equal widthPx.
+    val density = LocalDensity.current
+    val widthDp = with(density) { node.shape.widthPx.toDp() }
+    val heightDp = with(density) { node.shape.heightPx.toDp() }
     Box(
         modifier = Modifier
             .offset { IntOffset(node.x.roundToInt(), node.y.roundToInt()) }
-            .size(width = node.shape.widthPx.dp, height = node.shape.heightPx.dp)
+            .size(width = widthDp, height = heightDp)
             .clip(composeShapeFor(node.shape))
             .background(if (selected) MaterialTheme.colorScheme.primary else Color(node.colorArgb))
             .border(1.5.dp, Color.Black.copy(alpha = 0.3f), composeShapeFor(node.shape))
@@ -532,7 +543,7 @@ private fun DiagramNodeView(
     ) {
         if (hasSubroutineStripes(node.shape)) {
             Box(Modifier.fillMaxHeight().width(3.dp).offset(x = 8.dp).background(Color.Black.copy(alpha = 0.35f)))
-            Box(Modifier.fillMaxHeight().width(3.dp).offset(x = node.shape.widthPx.dp - 11.dp).background(Color.Black.copy(alpha = 0.35f)))
+            Box(Modifier.fillMaxHeight().width(3.dp).offset(x = widthDp - 11.dp).background(Color.Black.copy(alpha = 0.35f)))
         }
         Text(
             node.text,
