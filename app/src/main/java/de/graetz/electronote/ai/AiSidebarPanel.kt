@@ -305,6 +305,15 @@ fun AiSidebarPanel(
                         WebView(ctx).apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
+                            settings.useWideViewPort = true
+                            settings.loadWithOverviewMode = true
+                            // ChatGPT/Claude/Gemini detect the "; wv" marker Android stamps
+                            // into an embedded WebView's user agent and render a blank page
+                            // for it (the same category of block as Google's WebView-based
+                            // sign-in refusal) — stripping it makes the UA indistinguishable
+                            // from regular Chrome, which they do render correctly for.
+                            settings.userAgentString = settings.userAgentString.replace("; wv", "")
+                            WebView.setWebContentsDebuggingEnabled(true)
                             webViewClient = WebViewClient()
                             webViewRef = this
                             loadUrl(currentUrl)
