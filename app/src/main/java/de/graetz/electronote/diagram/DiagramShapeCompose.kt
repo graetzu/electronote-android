@@ -26,10 +26,11 @@ private val diamondShape = GenericShape { size, _ ->
 fun composeShapeFor(kind: DiagramShapeKind): Shape = when (kind) {
     DiagramShapeKind.START -> RoundedCornerShape(50)
     DiagramShapeKind.END -> RoundedCornerShape(50)
-    DiagramShapeKind.PROCESS -> RoundedCornerShape(5.dp)
+    DiagramShapeKind.PROCESS -> RoundedCornerShape(4.dp)
     DiagramShapeKind.IO -> parallelogramShape
     DiagramShapeKind.DECISION -> diamondShape
-    DiagramShapeKind.SUBROUTINE -> RoundedCornerShape(2.dp)
+    DiagramShapeKind.SUBROUTINE -> RoundedCornerShape(4.dp)
+    DiagramShapeKind.COMMENT -> RoundedCornerShape(0.dp)
     DiagramShapeKind.CONNECTOR -> CircleShape
     DiagramShapeKind.CIRCLE -> CircleShape
     DiagramShapeKind.OVAL -> RoundedCornerShape(50)
